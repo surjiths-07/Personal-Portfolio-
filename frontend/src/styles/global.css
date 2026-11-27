@@ -1,0 +1,181 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Montserrat Variable";
+  src: url("/fonts/montserrat-latin-wght-normal.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --background: #101010;
+  --component-bg: #1414149c;
+  --sec: #a476ff;
+  --white: #dfdfdf;
+  --white-icon: #f3f3f398;
+  --white-icon-tr: #f3f3f310;
+  --container: #141414;
+  --line: #2a2a2a;
+}
+
+* {
+  font-family: "Montserrat Variable", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: var(--background);
+  color: var(--white);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--white);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+*::selection {
+  background-color: var(--sec);
+  color: var(--background);
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #262626;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--sec);
+}
+
+.shiny-sec {
+  background: linear-gradient(135deg, #a476ff 25%, #eee5ff 50%, #a476ff 75%);
+  background-size: 400% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shine 3s linear infinite;
+}
+
+.shiny-white {
+  background: linear-gradient(135deg, #a6a6a6 25%, #ffffff 50%, #a6a6a6 75%);
+  background-size: 400% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shine 4.5s linear infinite;
+}
+
+@keyframes shine {
+  0% {
+    background-position: 100% 50%;
+  }
+  30%,
+  70% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-scroll {
+  animation: scroll 55s linear infinite;
+}
+
+@media (min-width: 768px) {
+  .animate-scroll {
+    animation-duration: 45s;
+  }
+}
+
+/* Floating Pill Navigation matching dark-minimal */
+nav#main-nav {
+  transform: translateX(-50%);
+  background-color: var(--background);
+  transition:
+    background-color 0.3s ease,
+    border-radius 0.3s ease,
+    border-color 0.3s ease,
+    width 0.25s ease;
+}
+
+nav#main-nav.scrolling {
+  background-color: rgba(20, 20, 20, 0.85);
+  border-color: #ffffff14;
+  border-radius: 9999px;
+}
+
+nav#main-nav a.active .nav-indicator,
+nav#main-nav button.active .nav-indicator {
+  transform: translateY(-50%) scale(1);
+  opacity: 1;
+}
+
+nav#main-nav a.active,
+nav#main-nav button.active {
+  color: #ffffff !important;
+}
+
+@media (max-width: 767px) {
+  nav#main-nav {
+    width: 100% !important;
+    transform: translateX(-50%);
+    bottom: 0;
+    left: 50%;
+    position: fixed;
+    border-radius: 1rem 1rem 0 0;
+    border-color: #ffffff14;
+    background-color: rgba(16, 16, 16, 0.94);
+  }
+
+  nav#main-nav.scrolling {
+    border-radius: 1rem 1rem 0 0;
+    background-color: rgba(20, 20, 20, 0.94);
+  }
+
+  body {
+    padding-bottom: 78px;
+  }
+}
+
+/* Smooth reveal animation */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Honeypot field */
+.hp-field {
+  position: absolute;
+  left: -9999px;
+  opacity: 0;
+  pointer-events: none;
+}
