@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { pool } = require('../config/db');
 const {
   cleanString,
@@ -239,7 +240,7 @@ async function deleteProject(req, res, next) {
   }
 }
 
-function uploadProjectImage(req, res) {
+async function uploadProjectImage(req, res, next) {
   if (!req.file) {
     return res.status(400).json({
       success: false,
@@ -247,11 +248,66 @@ function uploadProjectImage(req, res) {
     });
   }
 
-  return res.status(201).json({
-    success: true,
-    imageUrl: `/uploads/${req.file.filename}`,
-    filename: req.file.filename,
-  });
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  const isVercel = Boolean(process.env.VERCEL);
+
+  if (isVercel && !(cloudName && apiKey && apiSecret)) {
+    return res.status(503).json({
+      success: false,
+      message: 'Image upload storage is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in Vercel.',
+    });
+  }
+
+  try {
+    if (cloudName && apiKey && apiSecret) {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const folder = process.env.CLOUDINARY_UPLOAD_FOLDER || 'portfolio';
+      const signatureBase = `folder=${folder}&timestamp=${timestamp}`;
+      const signature = crypto
+        .createHash('sha1')
+        .update(signatureBase + apiSecret)
+        .digest('hex');
+
+      const form = new FormData();
+      form.append('file', new Blob([req.file.buffer], { type: req.file.mimetype }), req.file.originalname);
+      form.append('api_key', apiKey);
+      form.append('timestamp', String(timestamp));
+      form.append('folder', folder);
+      form.append('signature', signature);
+
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/upload`, {
+        method: 'POST',
+        body: form,
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.secure_url) {
+        const error = new Error(result.error?.message || 'Cloud image upload failed.');
+        error.statusCode = 502;
+        throw error;
+      }
+
+      return res.status(201).json({
+        success: true,
+        imageUrl: result.secure_url,
+        filename: result.public_id,
+      });
+    }
+
+    // Local development retains the existing disk-backed /uploads behavior.
+    if (!req.file.filename) {
+      return res.status(500).json({ success: false, message: 'Local upload filename was not created.' });
+    }
+    return res.status(201).json({
+      success: true,
+      imageUrl: `/uploads/${req.file.filename}`,
+      filename: req.file.filename,
+    });
+  } catch (err) {
+    return next(err);
+  }
 }
 
 module.exports = {
