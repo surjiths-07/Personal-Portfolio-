@@ -45,25 +45,49 @@ npm run dev
 
 ## Deployment Guide
 
-### Option 1: Full-Stack Deployment on Vercel + Cloud MySQL (Recommended)
-1. **Provision a Cloud MySQL Database** (e.g., Railway MySQL, Aiven, TiDB Cloud, or AWS RDS).
-2. **Import this repository in Vercel** with **Root Directory** left at the repo root (`.`). `vercel.json` handles:
-   - Installing `frontend/` and `backend/` dependencies
-   - Building `frontend/dist` (`npm run build`)
-   - Routing `/api/*` to `api/index.js` (Express serverless handler)
-   - SPA fallback rewrites for React Router pages
-3. **Configure Vercel Environment Variables** (*Project → Settings → Environment Variables*):
-   - `DATABASE_URL` = `mysql://<user>:<password>@<host>:<port>/<db>?ssl-mode=REQUIRED` *(or set `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSL=true`)*
-   - `AUTO_INIT_DB` = `true` *(initializes tables, seed data, and initial admin user on first cold start if empty)*
-   - `JWT_SECRET` = *(long random 64+ character string)*
-   - `ADMIN_USERNAME` = `admin`
-   - `ADMIN_EMAIL` = `your-email@example.com`
-   - `ADMIN_PASSWORD` = *(strong admin password)*
-   - **Leave `VITE_API_URL` unset** so frontend requests target `/api/...` on the same Vercel domain.
-4. **Verify after deploy**:
-   - `https://<your-site>.vercel.app/api/health` → `database: "connected"`
-   - `https://<your-site>.vercel.app/api/projects` → returns JSON project list
+### Vercel multi-service deployment (same domain)
 
-### Option 2: Split Hosting (Vercel/Netlify Frontend + Render/Railway Backend)
-- **Backend (Render / Railway)**: Deploy `backend/` with start command `npm start`, setting `PORT`, `DATABASE_URL` (or `DB_*`), `JWT_SECRET`, and `CORS_ORIGIN`.
-- **Frontend (Vercel / Netlify)**: Deploy `frontend/` with `VITE_API_URL` pointing to your deployed backend URL.
+This repository is configured as a Vercel project with two services in the root `vercel.json`:
+
+- **backend**: root `backend/`, Express, install command `npm ci`, entrypoint `src/server.js`.
+- **frontend**: root `frontend/`, Vite, install command `npm ci`, build command `npm run build`, output directory `dist`.
+
+Keep the Vercel project's **Root Directory** at the repository root. The root rewrites send `/api` and `/api/*` to the backend, `/uploads` and `/uploads/*` to the backend, and all remaining paths to the frontend. The frontend uses relative `/api` requests, so leave `VITE_API_URL` unset for this same-domain deployment. The frontend's `frontend/vercel.json` is a legacy SPA fallback for standalone frontend hosting; the root services configuration controls the multi-service deployment.
+
+### Required Vercel environment variables
+
+Set these in **Vercel → Project Settings → Environment Variables** and make sure they are available to the backend service for Production and any Preview deployments you use:
+
+**MySQL (choose one configuration):**
+
+- `DATABASE_URL`: hosted MySQL connection string, e.g. `mysql://USER:PASSWORD@HOST:3306/DATABASE?ssl-mode=REQUIRED`; or
+- `DB_HOST`, `DB_PORT` (usually `3306`), `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and `DB_SSL=true` when the provider requires TLS.
+
+Use a managed/cloud MySQL database reachable from Vercel. XAMPP's local MySQL on your laptop is only for local development and is not a production database.
+
+**Admin and initialization:**
+
+- `JWT_SECRET`: a strong, unique random secret.
+- `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`: set the initial admin credentials securely; do not use the example values.
+- `AUTO_INIT_DB=true`: optional database/schema/seed initialization. Prefer running `npm run db:init` against the hosted database as a controlled one-time setup if you can; if enabling automatic initialization, understand it may run during serverless cold starts.
+
+**Persistent image uploads (required for uploads on Vercel):**
+
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
+- `CLOUDINARY_UPLOAD_FOLDER` (optional; defaults to `portfolio`)
+
+Create these credentials in Cloudinary and add them as backend environment variables in Vercel. The backend uploads image bytes to Cloudinary and stores/returns the secure hosted image URL. Do not place Cloudinary secrets in any `VITE_*` frontend variable. In local development, when Cloudinary is not configured, the existing local disk upload path `/uploads/*` remains available.
+
+The backend keeps `/uploads/*` routed for compatibility with existing local/legacy assets, but local filesystem files are not durable or guaranteed to exist in Vercel serverless runtime. Migrate any previously uploaded files and update their stored image references to hosted Cloudinary URLs. New uploads require Cloudinary credentials in Vercel.
+
+### Verify after deployment
+
+- `GET https://<your-domain>/api/health` should report `database: "connected"`.
+- `GET https://<your-domain>/api/projects` should return the project JSON.
+- Sign in to the admin dashboard and upload a small image; confirm the returned image URL is a Cloudinary HTTPS URL and remains accessible after a new deployment.
+
+### Local development
+
+Run XAMPP/MySQL locally, configure `backend/.env` using `backend/.env.example`, and initialize the schema with `npm run db:init` from the repository root. Start the app with `npm run dev`. Local uploads are stored under `backend/uploads/` when Cloudinary is not configured.
