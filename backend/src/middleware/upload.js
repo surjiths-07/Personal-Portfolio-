@@ -1,14 +1,16 @@
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const multer = require('multer');
 
 const isServerless = Boolean(process.env.VERCEL);
-const uploadsDir = isServerless
-  ? path.join(os.tmpdir(), 'portfolio-uploads')
-  : path.join(__dirname, '..', '..', 'uploads');
+const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
+const cloudinaryConfigured = Boolean(
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_API_KEY &&
+  process.env.CLOUDINARY_API_SECRET
+);
 
-if (!fs.existsSync(uploadsDir)) {
+if (!isServerless && !cloudinaryConfigured && !fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
@@ -20,7 +22,7 @@ const allowedMimeTypes = new Set([
   'image/gif',
 ]);
 
-const storage = multer.diskStorage({
+const diskStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, uploadsDir);
   },
@@ -37,10 +39,16 @@ const storage = multer.diskStorage({
   },
 });
 
+// Vercel's function request limit is 4.5 MB. Keep the file limit below it to
+// leave room for multipart/form-data overhead. Local disk uploads remain 5 MB.
+const storage = isServerless || cloudinaryConfigured
+  ? multer.memoryStorage()
+  : diskStorage;
+
 const upload = multer({
   storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB
+    fileSize: isServerless ? 4 * 1024 * 1024 : 5 * 1024 * 1024,
   },
   fileFilter: (_req, file, cb) => {
     if (!allowedMimeTypes.has(file.mimetype)) {
