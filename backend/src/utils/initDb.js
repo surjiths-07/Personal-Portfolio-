@@ -4,50 +4,63 @@ const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
+const { buildPoolConfig } = require('../config/db');
+
+function stripDatabaseSetupStatements(sql) {
+  return sql
+    .replace(/^\s*CREATE\s+DATABASE\b[\s\S]*?;\s*/gim, '')
+    .replace(/^\s*USE\s+`?[\w-]+`?\s*;\s*/gim, '');
+}
+
 async function ensureDatabaseReady() {
-  const host = process.env.DB_HOST || '127.0.0.1';
-  const port = Number(process.env.DB_PORT || 3306);
-  const user = process.env.DB_USER || 'root';
-  const password = process.env.DB_PASSWORD || '';
-  const dbName = process.env.DB_NAME || 'portfolio_db';
-  const useSsl = String(process.env.DB_SSL || '').toLowerCase() === 'true';
-
-  const connectionConfig = {
-    host,
-    port,
-    user,
-    password,
-    multipleStatements: true,
-    charset: 'utf8mb4',
-  };
-
-  if (useSsl) {
-    connectionConfig.ssl = {
-      rejectUnauthorized: String(process.env.DB_SSL_REJECT_UNAUTHORIZED || 'true').toLowerCase() !== 'false',
-    };
+  const poolConfig = buildPoolConfig();
+  if (!poolConfig) {
+    throw new Error('MySQL configuration missing. Set DATABASE_URL or DB_HOST, DB_USER, DB_PASSWORD, DB_NAME.');
   }
 
-  const connection = await mysql.createConnection(connectionConfig);
+  const dbName = poolConfig.database || 'portfolio_db';
+  const schemaPath = path.join(__dirname, '..', '..', '..', 'database', 'schema.sql');
+  const seedPath = path.join(__dirname, '..', '..', '..', 'database', 'seed.sql');
+
+  let schemaSql = fs.readFileSync(schemaPath, 'utf8');
+  let seedSql = fs.readFileSync(seedPath, 'utf8');
+
+  if (dbName !== 'portfolio_db') {
+    schemaSql = schemaSql.replace(/portfolio_db/g, dbName);
+    seedSql = seedSql.replace(/portfolio_db/g, dbName);
+  }
+
+  const baseConnConfig = {
+    host: poolConfig.host,
+    port: poolConfig.port,
+    user: poolConfig.user,
+    password: poolConfig.password,
+    multipleStatements: true,
+    charset: 'utf8mb4',
+    ...(poolConfig.ssl ? { ssl: poolConfig.ssl } : {}),
+  };
+
+  let connection;
+  let connectedDirectlyToDb = false;
 
   try {
-    const schemaPath = path.join(__dirname, '..', '..', '..', 'database', 'schema.sql');
-    const seedPath = path.join(__dirname, '..', '..', '..', 'database', 'seed.sql');
-
-    let schemaSql = fs.readFileSync(schemaPath, 'utf8');
-    let seedSql = fs.readFileSync(seedPath, 'utf8');
-
-    if (dbName !== 'portfolio_db') {
-      schemaSql = schemaSql.replace(/portfolio_db/g, dbName);
-      seedSql = seedSql.replace(/portfolio_db/g, dbName);
-    }
-
+    connection = await mysql.createConnection(baseConnConfig);
     await connection.query(schemaSql);
     await connection.query(seedSql);
+  } catch (err) {
+    if (connection) {
+      await connection.end().catch(() => {});
+    }
+    // Managed MySQL hosts often disallow CREATE DATABASE; connect directly to the provisioned database.
+    connection = await mysql.createConnection({ ...baseConnConfig, database: dbName });
+    connectedDirectlyToDb = true;
+    await connection.query(stripDatabaseSetupStatements(schemaSql));
+    await connection.query(stripDatabaseSetupStatements(seedSql));
+  }
 
-    // Ensure at least one admin account exists with a bcrypt-hashed password
-    const [existingAdmins] = await connection.query(
-      `SELECT id FROM \`${dbName}\`.admin_users LIMIT 1`
-    );
+  try {
+    const tableRef = connectedDirectlyToDb ? 'admin_users' : `\`${dbName}\`.admin_users`;
+    const [existingAdmins] = await connection.query(`SELECT id FROM ${tableRef} LIMIT 1`);
 
     if (existingAdmins.length === 0) {
       const adminUsername = (process.env.ADMIN_USERNAME || 'admin').trim();
@@ -56,7 +69,7 @@ async function ensureDatabaseReady() {
       const passwordHash = await bcrypt.hash(adminPassword, 12);
 
       await connection.query(
-        `INSERT INTO \`${dbName}\`.admin_users (username, email, password_hash) VALUES (?, ?, ?)`,
+        `INSERT INTO ${tableRef} (username, email, password_hash) VALUES (?, ?, ?)`,
         [adminUsername, adminEmail, passwordHash]
       );
       console.log(`[DB Init] Created initial admin user: ${adminUsername}`);
@@ -64,7 +77,9 @@ async function ensureDatabaseReady() {
 
     console.log(`[DB Init] Database "${dbName}" is initialized and ready.`);
   } finally {
-    await connection.end();
+    if (connection) {
+      await connection.end().catch(() => {});
+    }
   }
 }
 

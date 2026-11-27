@@ -1,8 +1,13 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const multer = require('multer');
 
-const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
+const isServerless = Boolean(process.env.VERCEL);
+const uploadsDir = isServerless
+  ? path.join(os.tmpdir(), 'portfolio-uploads')
+  : path.join(__dirname, '..', '..', 'uploads');
+
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -21,12 +26,13 @@ const storage = multer.diskStorage({
   },
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase() || '.png';
-    const baseName = path
-      .basename(file.originalname, ext)
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'project-image';
+    const baseName =
+      path
+        .basename(file.originalname, ext)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40) || 'project-image';
     cb(null, `${baseName}-${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
   },
 });

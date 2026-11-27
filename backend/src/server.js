@@ -27,15 +27,33 @@ app.use(
   })
 );
 
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+function getAllowedOrigins() {
+  const configured = (process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  const vercelOrigins = [
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '',
+    process.env.VERCEL_BRANCH_URL ? `https://${process.env.VERCEL_BRANCH_URL}` : '',
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '',
+  ].filter(Boolean);
+
+  const defaults = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+  return new Set([...configured, ...vercelOrigins, ...defaults]);
+}
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      const allowedOrigins = getAllowedOrigins();
+      const allowVercelPreview =
+        Boolean(process.env.VERCEL) &&
+        !process.env.CORS_ORIGIN &&
+        typeof origin === 'string' &&
+        origin.endsWith('.vercel.app');
+
+      if (!origin || allowedOrigins.has('*') || allowedOrigins.has(origin) || allowVercelPreview) {
         return callback(null, true);
       }
       const corsError = new Error('Not allowed by CORS policy');
@@ -52,6 +70,14 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 // Serve uploaded project images
 app.use('/uploads', express.static(uploadsDir));
 
+app.get('/api', (_req, res) => {
+  res.json({
+    success: true,
+    service: 'Personal Portfolio API',
+    health: '/api/health',
+  });
+});
+
 // Health check
 app.get('/api/health', async (_req, res) => {
   try {
@@ -60,10 +86,11 @@ app.get('/api/health', async (_req, res) => {
       success: true,
       status: 'ok',
       database: 'connected',
+      runtime: process.env.VERCEL ? 'vercel-serverless' : 'node-server',
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    res.status(503).json({
+    res.status(err.statusCode || 503).json({
       success: false,
       status: 'degraded',
       database: 'disconnected',
