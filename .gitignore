@@ -25,3 +25,9 @@ backend/uploads/*
 # OS files
 .DS_Store
 Thumbs.db
+
+# Vercel CLI local state
+.vercel
+
+.vercel
+.env*
