@@ -16,8 +16,8 @@ async function login(req, res, next) {
       });
     }
 
-    const [rows] = await pool.query(
-      'SELECT id, username, email, password_hash FROM admin_users WHERE username = ? OR email = ? LIMIT 1',
+    const { rows } = await pool.query(
+      'SELECT id, username, email, password_hash FROM admin_users WHERE username = $1 OR email = $2 LIMIT 1',
       [identifier, identifier]
     );
 
@@ -59,8 +59,8 @@ async function login(req, res, next) {
 
 async function getMe(req, res, next) {
   try {
-    const [rows] = await pool.query(
-      'SELECT id, username, email, created_at FROM admin_users WHERE id = ? LIMIT 1',
+    const { rows } = await pool.query(
+      'SELECT id, username, email, created_at FROM admin_users WHERE id = $1 LIMIT 1',
       [req.admin.id]
     );
 
@@ -92,8 +92,8 @@ async function updatePassword(req, res, next) {
       });
     }
 
-    const [rows] = await pool.query(
-      'SELECT id, password_hash FROM admin_users WHERE id = ? LIMIT 1',
+    const { rows } = await pool.query(
+      'SELECT id, password_hash FROM admin_users WHERE id = $1 LIMIT 1',
       [req.admin.id]
     );
 
@@ -107,7 +107,7 @@ async function updatePassword(req, res, next) {
     }
 
     const newHash = await bcrypt.hash(newPassword, 12);
-    await pool.query('UPDATE admin_users SET password_hash = ? WHERE id = ?', [newHash, req.admin.id]);
+    await pool.query('UPDATE admin_users SET password_hash = $1 WHERE id = $2', [newHash, req.admin.id]);
 
     return res.json({
       success: true,

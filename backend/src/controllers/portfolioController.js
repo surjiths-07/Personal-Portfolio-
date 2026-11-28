@@ -18,7 +18,7 @@ const ALLOWED_TIMELINE_TYPES = new Set([
 
 async function getProfile(_req, res, next) {
   try {
-    const [rows] = await pool.query('SELECT * FROM portfolio_profile ORDER BY id ASC LIMIT 1');
+    const { rows } = await pool.query('SELECT * FROM portfolio_profile ORDER BY id ASC LIMIT 1');
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Portfolio profile not found.' });
     }
@@ -33,7 +33,7 @@ async function updateProfile(req, res, next) {
     const full_name = cleanString(req.body.full_name, 120);
     const professional_title = cleanString(req.body.professional_title, 200);
     const availability_badge = cleanString(req.body.availability_badge, 120);
-    const is_available = req.body.is_available ? 1 : 0;
+    const is_available = Boolean(req.body.is_available);
     const short_intro = cleanString(req.body.short_intro, 2000);
     const about_intro = cleanString(req.body.about_intro, 3000);
     const development_journey = cleanString(req.body.development_journey, 3000);
@@ -67,66 +67,55 @@ async function updateProfile(req, res, next) {
       return res.status(400).json({ success: false, message: 'Invalid URL format in profile links.' });
     }
 
-    const [existing] = await pool.query('SELECT id FROM portfolio_profile ORDER BY id ASC LIMIT 1');
+    const values = [
+      full_name,
+      professional_title,
+      availability_badge,
+      is_available,
+      short_intro,
+      about_intro,
+      development_journey,
+      education_summary,
+      areas_of_interest,
+      career_goals,
+      github_url,
+      linkedin_url,
+      email,
+      location,
+      resume_url,
+      profile_image,
+    ];
+
+    const { rows: existing } = await pool.query('SELECT id FROM portfolio_profile ORDER BY id ASC LIMIT 1');
+    let saved;
+
     if (existing.length === 0) {
-      await pool.query(
+      const { rows } = await pool.query(
         `INSERT INTO portfolio_profile (
           full_name, professional_title, availability_badge, is_available,
           short_intro, about_intro, development_journey, education_summary,
           areas_of_interest, career_goals, github_url, linkedin_url, email,
           location, resume_url, profile_image
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          full_name,
-          professional_title,
-          availability_badge,
-          is_available,
-          short_intro,
-          about_intro,
-          development_journey,
-          education_summary,
-          areas_of_interest,
-          career_goals,
-          github_url,
-          linkedin_url,
-          email,
-          location,
-          resume_url,
-          profile_image,
-        ]
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        RETURNING *`,
+        values
       );
+      saved = rows[0];
     } else {
-      await pool.query(
+      const { rows } = await pool.query(
         `UPDATE portfolio_profile SET
-          full_name = ?, professional_title = ?, availability_badge = ?, is_available = ?,
-          short_intro = ?, about_intro = ?, development_journey = ?, education_summary = ?,
-          areas_of_interest = ?, career_goals = ?, github_url = ?, linkedin_url = ?, email = ?,
-          location = ?, resume_url = ?, profile_image = ?
-        WHERE id = ?`,
-        [
-          full_name,
-          professional_title,
-          availability_badge,
-          is_available,
-          short_intro,
-          about_intro,
-          development_journey,
-          education_summary,
-          areas_of_interest,
-          career_goals,
-          github_url,
-          linkedin_url,
-          email,
-          location,
-          resume_url,
-          profile_image,
-          existing[0].id,
-        ]
+          full_name = $1, professional_title = $2, availability_badge = $3, is_available = $4,
+          short_intro = $5, about_intro = $6, development_journey = $7, education_summary = $8,
+          areas_of_interest = $9, career_goals = $10, github_url = $11, linkedin_url = $12, email = $13,
+          location = $14, resume_url = $15, profile_image = $16, updated_at = NOW()
+        WHERE id = $17
+        RETURNING *`,
+        [...values, existing[0].id]
       );
+      saved = rows[0];
     }
 
-    const [updated] = await pool.query('SELECT * FROM portfolio_profile ORDER BY id ASC LIMIT 1');
-    return res.json({ success: true, data: updated[0] });
+    return res.json({ success: true, data: saved });
   } catch (err) {
     return next(err);
   }
@@ -134,25 +123,34 @@ async function updateProfile(req, res, next) {
 
 async function downloadResume(_req, res, next) {
   try {
-    const [[profileRows], [skills], [projectRows], [timeline]] = await Promise.all([
+    const [profileRes, skillsRes, projectsRes, timelineRes] = await Promise.all([
       pool.query('SELECT * FROM portfolio_profile ORDER BY id ASC LIMIT 1'),
       pool.query('SELECT name, category FROM skills ORDER BY sort_order ASC, id ASC'),
-      pool.query('SELECT title, category, short_description, description, technologies FROM projects ORDER BY is_featured DESC, sort_order ASC, id ASC'),
-      pool.query('SELECT section_type, title, organization, period, description FROM timeline_items ORDER BY sort_order ASC, id ASC'),
+      pool.query(
+        'SELECT title, category, short_description, description, technologies FROM projects ORDER BY is_featured DESC, sort_order ASC, id ASC'
+      ),
+      pool.query(
+        'SELECT section_type, title, organization, period, description FROM timeline_items ORDER BY sort_order ASC, id ASC'
+      ),
     ]);
 
-    const profile = profileRows[0] || {
+    const profile = profileRes.rows[0] || {
       full_name: 'Surjith',
       professional_title: 'Full Stack Developer | AI Enthusiast',
-      short_intro: 'Full Stack Developer specializing in React, Node.js, Express, and MySQL.',
+      short_intro: 'Full Stack Developer specializing in React, Node.js, Express, and PostgreSQL.',
     };
 
-    const projects = projectRows.map((p) => ({
+    const projects = projectsRes.rows.map((p) => ({
       ...p,
       technologies: parseJsonArray(p.technologies),
     }));
 
-    const pdfBuffer = generateResumePdf({ profile, skills, projects, timeline });
+    const pdfBuffer = generateResumePdf({
+      profile,
+      skills: skillsRes.rows,
+      projects,
+      timeline: timelineRes.rows,
+    });
     const safeName = (profile.full_name || 'Developer').replace(/[^a-zA-Z0-9_-]+/g, '_');
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -165,7 +163,7 @@ async function downloadResume(_req, res, next) {
 
 async function getTimeline(_req, res, next) {
   try {
-    const [rows] = await pool.query('SELECT * FROM timeline_items ORDER BY sort_order ASC, id ASC');
+    const { rows } = await pool.query('SELECT * FROM timeline_items ORDER BY sort_order ASC, id ASC');
     const data = rows.map((row) => ({
       ...row,
       highlights: parseJsonArray(row.highlights),
@@ -194,13 +192,13 @@ async function createTimelineItem(req, res, next) {
       });
     }
 
-    const [result] = await pool.query(
+    const { rows } = await pool.query(
       `INSERT INTO timeline_items (section_type, title, organization, period, location, description, highlights, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
       [section_type, title, organization, period, location, description, highlights, sort_order]
     );
 
-    const [rows] = await pool.query('SELECT * FROM timeline_items WHERE id = ?', [result.insertId]);
     const item = rows[0];
     return res.status(201).json({
       success: true,
@@ -234,18 +232,18 @@ async function updateTimelineItem(req, res, next) {
       });
     }
 
-    const [result] = await pool.query(
+    const { rows, rowCount } = await pool.query(
       `UPDATE timeline_items
-       SET section_type = ?, title = ?, organization = ?, period = ?, location = ?, description = ?, highlights = ?, sort_order = ?
-       WHERE id = ?`,
+       SET section_type = $1, title = $2, organization = $3, period = $4, location = $5, description = $6, highlights = $7, sort_order = $8
+       WHERE id = $9
+       RETURNING *`,
       [section_type, title, organization, period, location, description, highlights, sort_order, id]
     );
 
-    if (result.affectedRows === 0) {
+    if (rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Timeline item not found.' });
     }
 
-    const [rows] = await pool.query('SELECT * FROM timeline_items WHERE id = ?', [id]);
     return res.json({
       success: true,
       data: { ...rows[0], highlights: parseJsonArray(rows[0].highlights) },
@@ -262,8 +260,8 @@ async function deleteTimelineItem(req, res, next) {
       return res.status(400).json({ success: false, message: 'Invalid timeline item ID.' });
     }
 
-    const [result] = await pool.query('DELETE FROM timeline_items WHERE id = ?', [id]);
-    if (result.affectedRows === 0) {
+    const { rowCount } = await pool.query('DELETE FROM timeline_items WHERE id = $1', [id]);
+    if (rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Timeline item not found.' });
     }
 
@@ -275,7 +273,7 @@ async function deleteTimelineItem(req, res, next) {
 
 async function getLikes(_req, res, next) {
   try {
-    const [rows] = await pool.query('SELECT likes_count FROM portfolio_likes WHERE id = 1 LIMIT 1');
+    const { rows } = await pool.query('SELECT likes_count FROM portfolio_likes WHERE id = 1 LIMIT 1');
     const likes = rows.length > 0 ? Number(rows[0].likes_count) : 0;
     return res.json({ success: true, likes });
   } catch (err) {
@@ -285,10 +283,13 @@ async function getLikes(_req, res, next) {
 
 async function incrementLikes(_req, res, next) {
   try {
-    await pool.query(
-      'INSERT INTO portfolio_likes (id, likes_count) VALUES (1, 1) ON DUPLICATE KEY UPDATE likes_count = likes_count + 1'
+    const { rows } = await pool.query(
+      `INSERT INTO portfolio_likes (id, likes_count)
+       VALUES (1, 1)
+       ON CONFLICT (id)
+       DO UPDATE SET likes_count = portfolio_likes.likes_count + 1, updated_at = NOW()
+       RETURNING likes_count`
     );
-    const [rows] = await pool.query('SELECT likes_count FROM portfolio_likes WHERE id = 1 LIMIT 1');
     const likes = rows.length > 0 ? Number(rows[0].likes_count) : 1;
     return res.json({ success: true, likes });
   } catch (err) {

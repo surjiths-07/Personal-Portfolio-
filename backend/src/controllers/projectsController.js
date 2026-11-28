@@ -24,10 +24,10 @@ async function ensureUniqueSlug(baseSlug, excludeId = null) {
   let counter = 1;
   while (true) {
     const query = excludeId
-      ? 'SELECT id FROM projects WHERE slug = ? AND id != ? LIMIT 1'
-      : 'SELECT id FROM projects WHERE slug = ? LIMIT 1';
+      ? 'SELECT id FROM projects WHERE slug = $1 AND id != $2 LIMIT 1'
+      : 'SELECT id FROM projects WHERE slug = $1 LIMIT 1';
     const params = excludeId ? [candidate, excludeId] : [candidate];
-    const [rows] = await pool.query(query, params);
+    const { rows } = await pool.query(query, params);
     if (rows.length === 0) return candidate;
     counter += 1;
     candidate = `${baseSlug}-${counter}`;
@@ -43,16 +43,16 @@ async function getProjects(req, res, next) {
     const params = [];
 
     if (category && category.toLowerCase() !== 'all') {
-      sql += ' AND category LIKE ?';
       params.push(`%${category}%`);
+      sql += ` AND category ILIKE $${params.length}`;
     }
 
     if (featured === 'true' || featured === '1') {
-      sql += ' AND is_featured = 1';
+      sql += ' AND is_featured = TRUE';
     }
 
     sql += ' ORDER BY is_featured DESC, sort_order ASC, id DESC';
-    const [rows] = await pool.query(sql, params);
+    const { rows } = await pool.query(sql, params);
     return res.json({ success: true, data: rows.map(formatProject) });
   } catch (err) {
     return next(err);
@@ -64,8 +64,8 @@ async function getProjectBySlugOrId(req, res, next) {
     const param = cleanString(req.params.slugOrId, 160);
     const isNumeric = /^\d+$/.test(param);
 
-    const [rows] = await pool.query(
-      isNumeric ? 'SELECT * FROM projects WHERE id = ? LIMIT 1' : 'SELECT * FROM projects WHERE slug = ? LIMIT 1',
+    const { rows } = await pool.query(
+      isNumeric ? 'SELECT * FROM projects WHERE id = $1 LIMIT 1' : 'SELECT * FROM projects WHERE slug = $1 LIMIT 1',
       [isNumeric ? Number(param) : param]
     );
 
@@ -115,7 +115,7 @@ function validateProjectPayload(body) {
       future_enhancements: serializeJsonArray(body.future_enhancements),
       github_url,
       demo_url,
-      is_featured: body.is_featured ? 1 : 0,
+      is_featured: Boolean(body.is_featured),
       sort_order: Number(body.sort_order || 0),
     },
   };
@@ -131,12 +131,13 @@ async function createProject(req, res, next) {
     const requestedSlug = cleanString(req.body.slug, 150) || payload.title;
     const slug = await ensureUniqueSlug(slugify(requestedSlug));
 
-    const [result] = await pool.query(
+    const { rows } = await pool.query(
       `INSERT INTO projects (
         slug, title, short_description, description, category, image, screenshots,
         technologies, features, problem_statement, proposed_solution, objectives,
         future_enhancements, github_url, demo_url, is_featured, sort_order
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      RETURNING *`,
       [
         slug,
         payload.title,
@@ -158,7 +159,6 @@ async function createProject(req, res, next) {
       ]
     );
 
-    const [rows] = await pool.query('SELECT * FROM projects WHERE id = ?', [result.insertId]);
     return res.status(201).json({ success: true, data: formatProject(rows[0]) });
   } catch (err) {
     return next(err);
@@ -172,7 +172,7 @@ async function updateProject(req, res, next) {
       return res.status(400).json({ success: false, message: 'Invalid project ID.' });
     }
 
-    const [existingRows] = await pool.query('SELECT id, slug FROM projects WHERE id = ? LIMIT 1', [id]);
+    const { rows: existingRows } = await pool.query('SELECT id, slug FROM projects WHERE id = $1 LIMIT 1', [id]);
     if (existingRows.length === 0) {
       return res.status(404).json({ success: false, message: 'Project not found.' });
     }
@@ -185,13 +185,15 @@ async function updateProject(req, res, next) {
     const requestedSlug = cleanString(req.body.slug, 150) || existingRows[0].slug || payload.title;
     const slug = await ensureUniqueSlug(slugify(requestedSlug), id);
 
-    await pool.query(
+    const { rows } = await pool.query(
       `UPDATE projects SET
-        slug = ?, title = ?, short_description = ?, description = ?, category = ?,
-        image = ?, screenshots = ?, technologies = ?, features = ?,
-        problem_statement = ?, proposed_solution = ?, objectives = ?,
-        future_enhancements = ?, github_url = ?, demo_url = ?, is_featured = ?, sort_order = ?
-      WHERE id = ?`,
+        slug = $1, title = $2, short_description = $3, description = $4, category = $5,
+        image = $6, screenshots = $7, technologies = $8, features = $9,
+        problem_statement = $10, proposed_solution = $11, objectives = $12,
+        future_enhancements = $13, github_url = $14, demo_url = $15, is_featured = $16,
+        sort_order = $17, updated_at = NOW()
+      WHERE id = $18
+      RETURNING *`,
       [
         slug,
         payload.title,
@@ -214,7 +216,6 @@ async function updateProject(req, res, next) {
       ]
     );
 
-    const [rows] = await pool.query('SELECT * FROM projects WHERE id = ?', [id]);
     return res.json({ success: true, data: formatProject(rows[0]) });
   } catch (err) {
     return next(err);
@@ -228,8 +229,8 @@ async function deleteProject(req, res, next) {
       return res.status(400).json({ success: false, message: 'Invalid project ID.' });
     }
 
-    const [result] = await pool.query('DELETE FROM projects WHERE id = ?', [id]);
-    if (result.affectedRows === 0) {
+    const { rowCount } = await pool.query('DELETE FROM projects WHERE id = $1', [id]);
+    if (rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Project not found.' });
     }
 

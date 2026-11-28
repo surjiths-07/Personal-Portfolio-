@@ -79,7 +79,7 @@ export function ContactSection({ profile }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="text-[var(--white-icon)] space-y-5 reveal">
             <p className="leading-relaxed">
-              Have a question, project idea, or role in mind? Feel free to reach out—every message is stored securely in MySQL.
+              Have a question, project idea, or role in mind? Feel free to reach out—every message is stored securely in PostgreSQL.
             </p>
 
             <div className="space-y-3 text-sm">

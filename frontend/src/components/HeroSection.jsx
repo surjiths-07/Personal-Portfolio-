@@ -15,7 +15,7 @@ const ACCORDION_ITEMS = [
     ],
   },
   {
-    title: 'MySQL & Relational Design',
+    title: 'PostgreSQL & Supabase Design',
     icon: Database,
     bullets: [
       'Normalized database schemas & SQL queries',

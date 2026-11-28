@@ -8,7 +8,7 @@ export function Footer({ profile }) {
   const stackItems = [
     { desc: 'Frontend with', name: 'React.js', icon: '/svg/react.svg' },
     { desc: 'Backend with', name: 'Node.js & Express', icon: '/svg/nodejs.svg' },
-    { desc: 'Database on', name: 'MySQL', icon: '/svg/mysql.svg' },
+    { desc: 'Database on', name: 'Supabase / PostgreSQL', icon: '/svg/supabase.svg' },
   ];
 
   return (
@@ -87,7 +87,7 @@ export function Footer({ profile }) {
               <Link to="/admin" className="hover:text-[var(--sec)] transition">Admin</Link>
             </div>
             <p className="text-xs opacity-75">
-              Powered by Node.js, Express.js &amp; MySQL
+              Powered by Node.js, Express.js &amp; PostgreSQL
             </p>
           </div>
         </div>

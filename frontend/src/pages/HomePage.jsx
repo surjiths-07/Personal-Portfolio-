@@ -80,7 +80,7 @@ export function HomePage({ onProfileLoaded }) {
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto py-36 text-center text-[var(--white-icon)]">
-        Loading portfolio from MySQL...
+        Loading portfolio from database...
       </div>
     );
   }
@@ -89,7 +89,7 @@ export function HomePage({ onProfileLoaded }) {
     return (
       <div className="max-w-5xl mx-auto py-28">
         <div className="p-5 rounded-2xl bg-rose-950/30 border border-rose-500/40 text-rose-200">
-          <strong>Backend Connection Issue:</strong> {error}. Make sure MySQL and the Express server are running.
+          <strong>Backend Connection Issue:</strong> {error}. Make sure PostgreSQL / Supabase and the Express server are running.
         </div>
       </div>
     );

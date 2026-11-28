@@ -67,6 +67,21 @@ app.use(
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
+// Optional cold-start schema/seed initialization for serverless / cloud deployments
+let autoInitPromise = null;
+app.use(async (_req, _res, next) => {
+  if (String(process.env.AUTO_INIT_DB || '').toLowerCase() === 'true') {
+    if (!autoInitPromise) {
+      autoInitPromise = ensureDatabaseReady().catch((err) => {
+        autoInitPromise = null;
+        console.error('[Auto DB Init Warning]', err.message);
+      });
+    }
+    await autoInitPromise;
+  }
+  next();
+});
+
 // Serve uploaded project images
 app.use('/uploads', express.static(uploadsDir));
 
@@ -113,7 +128,7 @@ async function startServer() {
   try {
     await ensureDatabaseReady();
   } catch (err) {
-    console.warn('[Startup Warning] Could not auto-initialize MySQL:', err.message);
+    console.warn('[Startup Warning] Could not auto-initialize PostgreSQL:', err.message);
   }
 
   app.listen(PORT, () => {

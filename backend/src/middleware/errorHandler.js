@@ -16,24 +16,37 @@ function getSafeErrorDetails(err) {
     return { statusCode: 503, message: err.message };
   }
 
-  if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'ENOTFOUND' || code === 'ECONNRESET') {
+  if (
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ENOTFOUND' ||
+    code === 'ECONNRESET' ||
+    code === 'ENETUNREACH'
+  ) {
     return {
       statusCode: 503,
-      message: 'Cannot reach the MySQL database. Verify DATABASE_URL / DB_HOST, port, SSL, and network access.',
+      message: 'Cannot reach the PostgreSQL / Supabase database. Verify DATABASE_URL, SSL, and network access.',
     };
   }
 
-  if (code === 'ER_ACCESS_DENIED_ERROR') {
+  if (code === '28P01' || code === '28000') {
     return {
       statusCode: 503,
-      message: 'MySQL authentication failed. Verify DB_USER and DB_PASSWORD (or DATABASE_URL).',
+      message: 'PostgreSQL / Supabase authentication failed. Verify your DATABASE_URL credentials.',
     };
   }
 
-  if (code === 'ER_NO_SUCH_TABLE' || code === 'ER_BAD_DB_ERROR') {
+  if (code === '42P01' || code === '3D000') {
     return {
       statusCode: 503,
-      message: 'MySQL database or tables are not initialized. Set AUTO_INIT_DB=true or run npm run db:init.',
+      message: 'PostgreSQL tables are not initialized. Set AUTO_INIT_DB=true or run database/schema.sql.',
+    };
+  }
+
+  if (code === '23505') {
+    return {
+      statusCode: 409,
+      message: 'A record with this unique value already exists.',
     };
   }
 

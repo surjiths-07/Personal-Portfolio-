@@ -10,7 +10,6 @@ function looksLikeSpam(text) {
 
 async function submitContactMessage(req, res, next) {
   try {
-    // Honeypot check (invisible field in UI; bots often fill it)
     const honeypot = cleanString(req.body.website || req.body.company_hp, 200);
     if (honeypot) {
       return res.status(400).json({
@@ -46,20 +45,17 @@ async function submitContactMessage(req, res, next) {
 
     const ipAddress = cleanString(req.ip || req.socket?.remoteAddress || '', 64);
 
-    const [result] = await pool.query(
-      'INSERT INTO contact_messages (name, email, subject, message, ip_address) VALUES (?, ?, ?, ?, ?)',
+    const { rows } = await pool.query(
+      `INSERT INTO contact_messages (name, email, subject, message, ip_address)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, name, email, subject`,
       [name, email, subject, message, ipAddress]
     );
 
     return res.status(201).json({
       success: true,
       message: 'Thank you! Your message has been received.',
-      data: {
-        id: result.insertId,
-        name,
-        email,
-        subject,
-      },
+      data: rows[0],
     });
   } catch (err) {
     return next(err);
@@ -68,7 +64,7 @@ async function submitContactMessage(req, res, next) {
 
 async function getContactMessages(_req, res, next) {
   try {
-    const [rows] = await pool.query('SELECT * FROM contact_messages ORDER BY created_at DESC, id DESC');
+    const { rows } = await pool.query('SELECT * FROM contact_messages ORDER BY created_at DESC, id DESC');
     return res.json({ success: true, data: rows });
   } catch (err) {
     return next(err);
@@ -82,15 +78,15 @@ async function toggleMessageRead(req, res, next) {
       return res.status(400).json({ success: false, message: 'Invalid message ID.' });
     }
 
-    const isRead = req.body.is_read !== undefined ? (req.body.is_read ? 1 : 0) : null;
-    if (isRead === null) {
-      await pool.query('UPDATE contact_messages SET is_read = NOT is_read WHERE id = ?', [id]);
-    } else {
-      await pool.query('UPDATE contact_messages SET is_read = ? WHERE id = ?', [isRead, id]);
-    }
+    const hasExplicit = req.body.is_read !== undefined;
+    const { rows, rowCount } = hasExplicit
+      ? await pool.query('UPDATE contact_messages SET is_read = $1 WHERE id = $2 RETURNING *', [
+          Boolean(req.body.is_read),
+          id,
+        ])
+      : await pool.query('UPDATE contact_messages SET is_read = NOT is_read WHERE id = $1 RETURNING *', [id]);
 
-    const [rows] = await pool.query('SELECT * FROM contact_messages WHERE id = ?', [id]);
-    if (rows.length === 0) {
+    if (rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Message not found.' });
     }
 
@@ -107,8 +103,8 @@ async function deleteContactMessage(req, res, next) {
       return res.status(400).json({ success: false, message: 'Invalid message ID.' });
     }
 
-    const [result] = await pool.query('DELETE FROM contact_messages WHERE id = ?', [id]);
-    if (result.affectedRows === 0) {
+    const { rowCount } = await pool.query('DELETE FROM contact_messages WHERE id = $1', [id]);
+    if (rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Message not found.' });
     }
 

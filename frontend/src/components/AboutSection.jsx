@@ -22,7 +22,7 @@ export function AboutSection({ profile }) {
             </div>
             <p className="text-[var(--white-icon)] leading-relaxed text-sm md:text-base">
               {profile?.about_intro ||
-                'I am a Full Stack Developer and AI Enthusiast passionate about building clean, dependable web applications backed by Node.js, Express.js, and MySQL.'}
+                'I am a Full Stack Developer and AI Enthusiast passionate about building clean, dependable web applications backed by Node.js, Express.js, and PostgreSQL.'}
             </p>
             <p className="text-[var(--white-icon)] leading-relaxed text-sm md:text-base mt-3 flex items-start gap-2">
               <Sparkles size={16} className="text-[var(--sec)] flex-shrink-0 mt-1" />

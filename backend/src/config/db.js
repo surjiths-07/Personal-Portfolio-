@@ -1,59 +1,60 @@
-const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 
 function buildPoolConfig() {
-  const connectionUrl = process.env.DATABASE_URL || process.env.MYSQL_URL || '';
-  const useSsl = String(process.env.DB_SSL || '').toLowerCase() === 'true';
-  const isVercel = Boolean(process.env.VERCEL);
+  const connectionUrl =
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.SUPABASE_DB_URL ||
+    '';
 
-  if (!connectionUrl && isVercel && !process.env.DB_HOST) {
+  const isVercel = Boolean(process.env.VERCEL);
+  const sslEnv = String(process.env.DB_SSL || '').toLowerCase();
+
+  if (!connectionUrl && isVercel && !process.env.PGHOST && !process.env.DB_HOST) {
     return null;
   }
 
   const baseOptions = {
-    waitForConnections: true,
-    connectionLimit: isVercel ? 5 : 10,
-    queueLimit: 0,
-    connectTimeout: 10000,
-    enableKeepAlive: true,
-    charset: 'utf8mb4',
+    max: isVercel ? 5 : 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
   };
 
   if (connectionUrl) {
     const parsed = new URL(connectionUrl);
-    const dbName = parsed.pathname.replace(/^\/+/, '') || process.env.DB_NAME || 'portfolio_db';
-    const sslMode = (parsed.searchParams.get('ssl-mode') || parsed.searchParams.get('ssl') || '').toLowerCase();
-    const shouldUseSsl = useSsl || sslMode === 'required' || sslMode === 'true';
+    const isLocalHost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    const disableSsl = sslEnv === 'false' || parsed.searchParams.get('sslmode') === 'disable';
 
     const config = {
       ...baseOptions,
-      host: parsed.hostname,
-      port: Number(parsed.port || 3306),
-      user: decodeURIComponent(parsed.username),
-      password: decodeURIComponent(parsed.password),
-      database: dbName,
+      connectionString: connectionUrl,
     };
 
-    if (shouldUseSsl) {
+    if (!disableSsl && (!isLocalHost || sslEnv === 'true' || isVercel)) {
       config.ssl = {
-        rejectUnauthorized: String(process.env.DB_SSL_REJECT_UNAUTHORIZED || 'true').toLowerCase() !== 'false',
+        rejectUnauthorized: String(process.env.DB_SSL_REJECT_UNAUTHORIZED || 'false').toLowerCase() === 'true',
       };
     }
 
     return config;
   }
 
+  const host = process.env.PGHOST || process.env.DB_HOST || '127.0.0.1';
+  const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+  const disableSsl = sslEnv === 'false';
+
   const config = {
     ...baseOptions,
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'portfolio_db',
+    host,
+    port: Number(process.env.PGPORT || process.env.DB_PORT || 5432),
+    user: process.env.PGUSER || process.env.DB_USER || 'postgres',
+    password: process.env.PGPASSWORD || process.env.DB_PASSWORD || '',
+    database: process.env.PGDATABASE || process.env.DB_NAME || 'postgres',
   };
 
-  if (useSsl) {
+  if (!disableSsl && (!isLocalHost || sslEnv === 'true' || isVercel)) {
     config.ssl = {
-      rejectUnauthorized: String(process.env.DB_SSL_REJECT_UNAUTHORIZED || 'true').toLowerCase() !== 'false',
+      rejectUnauthorized: String(process.env.DB_SSL_REJECT_UNAUTHORIZED || 'false').toLowerCase() === 'true',
     };
   }
 
@@ -61,12 +62,12 @@ function buildPoolConfig() {
 }
 
 const poolConfig = buildPoolConfig();
-const pool = poolConfig ? mysql.createPool(poolConfig) : null;
+const pool = poolConfig ? new Pool(poolConfig) : null;
 
 function ensurePoolConfigured() {
   if (!pool) {
     const err = new Error(
-      'MySQL database is not configured. Set DATABASE_URL (or DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME) in Vercel Environment Variables.'
+      'PostgreSQL / Supabase database is not configured. Set DATABASE_URL (or POSTGRES_URL) in Vercel Environment Variables.'
     );
     err.statusCode = 503;
     throw err;
@@ -87,13 +88,8 @@ const safePool = new Proxy(
 
 async function testConnection() {
   const activePool = ensurePoolConfigured();
-  const connection = await activePool.getConnection();
-  try {
-    await connection.query('SELECT 1');
-    return true;
-  } finally {
-    connection.release();
-  }
+  await activePool.query('SELECT 1');
+  return true;
 }
 
 module.exports = { pool: safePool, testConnection, buildPoolConfig };

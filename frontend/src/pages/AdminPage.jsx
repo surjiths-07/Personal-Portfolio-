@@ -23,7 +23,7 @@ const EMPTY_PROJECT_FORM = {
   category: 'Full-Stack Development',
   image: '/images/codegen-cover.png',
   screenshots: '/images/codegen-cover.png',
-  technologies: 'React.js, Node.js, Express.js, MySQL',
+  technologies: 'React.js, Node.js, Express.js, PostgreSQL',
   features: '',
   problem_statement: '',
   proposed_solution: '',
@@ -43,7 +43,7 @@ const SKILL_CATEGORIES = [
 
 const SKILL_ICONS = [
   'html5', 'css3', 'javascript', 'react', 'nodejs', 'express', 'api',
-  'mysql', 'sql', 'database', 'crud', 'ai', 'git', 'github', 'vscode', 'antigravity',
+  'postgresql', 'supabase', 'sql', 'database', 'crud', 'ai', 'git', 'github', 'vscode', 'antigravity',
 ];
 
 const inputCls =
@@ -180,10 +180,10 @@ export function AdminPage() {
 
       if (projectForm.id) {
         await portfolioApi.updateProject(projectForm.id, payload);
-        showNotice('success', 'Project updated in MySQL.');
+        showNotice('success', 'Project updated in PostgreSQL.');
       } else {
         await portfolioApi.createProject(payload);
-        showNotice('success', 'New project added to MySQL.');
+        showNotice('success', 'New project added to PostgreSQL.');
       }
 
       setProjectForm(EMPTY_PROJECT_FORM);
@@ -276,7 +276,7 @@ export function AdminPage() {
     try {
       await portfolioApi.updateProfile(profile);
       await loadAdminData();
-      showNotice('success', 'Portfolio profile saved to MySQL.');
+      showNotice('success', 'Portfolio profile saved to PostgreSQL.');
     } catch (err) {
       showNotice('error', err.message);
     }
@@ -343,7 +343,7 @@ export function AdminPage() {
           <div className="text-sm text-[var(--sec)] shiny-sec mb-1">Protected Portal</div>
           <h1 className="text-2xl font-semibold mb-2">Admin Sign In</h1>
           <p className="text-sm text-[var(--white-icon)] mb-6">
-            Sign in with your administrator credentials stored securely via bcrypt in MySQL.
+            Sign in with your administrator credentials stored securely via bcrypt in PostgreSQL.
           </p>
 
           {notice && (

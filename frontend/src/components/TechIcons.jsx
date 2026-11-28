@@ -36,7 +36,10 @@ export function TechIcon({ iconKey = 'code', size = 18 }) {
     case 'api':
       return <Webhook size={size} color="#818cf8" />;
     case 'mysql':
+    case 'postgresql':
       return <Database size={size} color="#38bdf8" />;
+    case 'supabase':
+      return <Database size={size} color="#3ecf8e" />;
     case 'sql':
       return <Table2 size={size} color="#a78bfa" />;
     case 'database':

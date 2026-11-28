@@ -6,7 +6,7 @@ const TECHNOLOGIES = [
   { key: 'javaScript', label: 'JavaScript' },
   { key: 'react', label: 'React.js' },
   { key: 'nodejs', label: 'Node.js' },
-  { key: 'mysql', label: 'MySQL' },
+  { key: 'supabase', label: 'Supabase' },
   { key: 'git', label: 'Git' },
   { key: 'tailwindcss', label: 'TailwindCSS' },
   { key: 'vercel', label: 'Vercel' },
